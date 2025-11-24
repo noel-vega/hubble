@@ -60,6 +60,8 @@ func main() {
 
 		r.Get("/auth/me", authHandler.Me)
 		r.Get("/containers", containersHandler.List)
+		r.Post("/containers/{id}/stop", containersHandler.Stop)
+		r.Post("/containers/{id}/start", containersHandler.Start)
 	})
 
 	// Start server

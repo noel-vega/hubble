@@ -80,3 +80,17 @@ func (s *Service) Close() error {
 	}
 	return nil
 }
+
+func (s *Service) StopContainer(ctx context.Context, containerID string) error {
+	if err := s.client.ContainerStop(ctx, containerID, container.StopOptions{}); err != nil {
+		return fmt.Errorf("failed to stop container: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) StartContainer(ctx context.Context, containerID string) error {
+	if err := s.client.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
+		return fmt.Errorf("failed to start container: %w", err)
+	}
+	return nil
+}
