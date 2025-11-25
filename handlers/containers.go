@@ -75,3 +75,22 @@ func (h *ContainersHandler) Start(w http.ResponseWriter, r *http.Request) {
 		"id":      containerID,
 	})
 }
+
+func (h *ContainersHandler) Get(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	containerID := chi.URLParam(r, "id")
+
+	if containerID == "" {
+		http.Error(w, "container ID is required", http.StatusBadRequest)
+		return
+	}
+
+	container, err := h.dockerService.GetContainer(ctx, containerID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(container)
+}

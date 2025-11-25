@@ -83,6 +83,7 @@ func main() {
 			r.Get("/registry/catalog", registryHandler.ListRepositoriesWithTags)
 		}
 		r.Get("/containers", containersHandler.List)
+		r.Get("/containers/{id}", containersHandler.Get)
 		r.Post("/containers/{id}/stop", containersHandler.Stop)
 		r.Post("/containers/{id}/start", containersHandler.Start)
 		r.Get("/images", imagesHandler.List)
