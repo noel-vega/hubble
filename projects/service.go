@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/docker/docker/api/types/container"
@@ -60,6 +61,7 @@ type ComposeService struct {
 	Networks    []string          `json:"networks"`
 	Restart     string            `json:"restart"`
 	Command     string            `json:"command"`
+	Status      string            `json:"status"`
 }
 
 type ComposeFile struct {
@@ -429,6 +431,9 @@ func (s *Service) GetProjectServices(ctx context.Context, projectName string) ([
 	var compose ComposeFile
 	services := []ComposeService{}
 
+	// Get status for all services in this project
+	serviceStatuses := s.getServiceStatuses(ctx, projectName)
+
 	if err := yaml.Unmarshal(content, &compose); err == nil {
 		for serviceName, serviceData := range compose.Services {
 			// Initialize with empty slices and maps
@@ -439,6 +444,12 @@ func (s *Service) GetProjectServices(ctx context.Context, projectName string) ([
 				Volumes:     []string{},
 				DependsOn:   []string{},
 				Networks:    []string{},
+				Status:      "not_created", // Default status
+			}
+
+			// Set actual status if container exists
+			if status, exists := serviceStatuses[serviceName]; exists {
+				service.Status = status
 			}
 
 			if svcMap, ok := serviceData.(map[string]interface{}); ok {
@@ -602,4 +613,159 @@ func (s *Service) getContainerCounts(ctx context.Context, projectName string) (r
 	}
 
 	return running, stopped
+}
+
+func (s *Service) getServiceStatuses(ctx context.Context, projectName string) map[string]string {
+	statuses := make(map[string]string)
+
+	if s.dockerClient == nil {
+		return statuses
+	}
+
+	filterArgs := filters.NewArgs()
+	filterArgs.Add("label", fmt.Sprintf("com.docker.compose.project=%s", projectName))
+
+	containers, err := s.dockerClient.ContainerList(ctx, container.ListOptions{
+		All:     true,
+		Filters: filterArgs,
+	})
+	if err != nil {
+		return statuses
+	}
+
+	// Map service name to highest priority status
+	// Priority: running > stopped > not_created
+	for _, c := range containers {
+		serviceName := c.Labels["com.docker.compose.service"]
+		if serviceName == "" {
+			continue
+		}
+
+		currentStatus := statuses[serviceName]
+
+		// If any container is running, mark service as running
+		if c.State == "running" {
+			statuses[serviceName] = "running"
+		} else if currentStatus != "running" {
+			// Only set to stopped if not already marked as running
+			statuses[serviceName] = "stopped"
+		}
+	}
+
+	return statuses
+}
+
+func (s *Service) StartService(ctx context.Context, projectName, serviceName string) error {
+	if s.dockerClient == nil {
+		return fmt.Errorf("docker client not available")
+	}
+
+	// Find containers for this service
+	filterArgs := filters.NewArgs()
+	filterArgs.Add("label", fmt.Sprintf("com.docker.compose.project=%s", projectName))
+	filterArgs.Add("label", fmt.Sprintf("com.docker.compose.service=%s", serviceName))
+
+	containers, err := s.dockerClient.ContainerList(ctx, container.ListOptions{
+		All:     true,
+		Filters: filterArgs,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	if len(containers) == 0 {
+		// No containers found - create and start using docker-compose
+		return s.dockerComposeUp(ctx, projectName, serviceName)
+	}
+
+	// Containers exist - start them
+	var startErrors []string
+	for _, c := range containers {
+		if c.State != "running" {
+			if err := s.dockerClient.ContainerStart(ctx, c.ID, container.StartOptions{}); err != nil {
+				startErrors = append(startErrors, fmt.Sprintf("container %s: %v", c.ID[:12], err))
+			}
+		}
+	}
+
+	if len(startErrors) > 0 {
+		return fmt.Errorf("failed to start some containers: %v", startErrors)
+	}
+
+	return nil
+}
+
+func (s *Service) dockerComposeUp(ctx context.Context, projectName, serviceName string) error {
+	projectPath := filepath.Join(s.rootPath, projectName)
+
+	// Verify project directory exists
+	if _, err := os.Stat(projectPath); os.IsNotExist(err) {
+		return fmt.Errorf("project directory not found: %s", projectPath)
+	}
+
+	// Verify docker-compose file exists
+	composeFiles := []string{"docker-compose.yml", "docker-compose.yaml"}
+	var composeFile string
+	for _, filename := range composeFiles {
+		path := filepath.Join(projectPath, filename)
+		if _, err := os.Stat(path); err == nil {
+			composeFile = filename
+			break
+		}
+	}
+
+	if composeFile == "" {
+		return fmt.Errorf("no docker-compose file found in project: %s", projectName)
+	}
+
+	// Run docker compose up -d <service>
+	// Using "docker compose" (modern plugin) instead of "docker-compose" (legacy)
+	cmd := exec.CommandContext(ctx, "docker", "compose", "-f", composeFile, "-p", projectName, "up", "-d", serviceName)
+	cmd.Dir = projectPath
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to start service with docker compose: %w (output: %s)", err, string(output))
+	}
+
+	return nil
+}
+
+func (s *Service) StopService(ctx context.Context, projectName, serviceName string) error {
+	if s.dockerClient == nil {
+		return fmt.Errorf("docker client not available")
+	}
+
+	// Find containers for this service
+	filterArgs := filters.NewArgs()
+	filterArgs.Add("label", fmt.Sprintf("com.docker.compose.project=%s", projectName))
+	filterArgs.Add("label", fmt.Sprintf("com.docker.compose.service=%s", serviceName))
+
+	containers, err := s.dockerClient.ContainerList(ctx, container.ListOptions{
+		All:     true,
+		Filters: filterArgs,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	if len(containers) == 0 {
+		return fmt.Errorf("no containers found for service %s in project %s", serviceName, projectName)
+	}
+
+	// Stop all containers for this service
+	var stopErrors []string
+	for _, c := range containers {
+		if c.State == "running" {
+			if err := s.dockerClient.ContainerStop(ctx, c.ID, container.StopOptions{}); err != nil {
+				stopErrors = append(stopErrors, fmt.Sprintf("container %s: %v", c.ID[:12], err))
+			}
+		}
+	}
+
+	if len(stopErrors) > 0 {
+		return fmt.Errorf("failed to stop some containers: %v", stopErrors)
+	}
+
+	return nil
 }

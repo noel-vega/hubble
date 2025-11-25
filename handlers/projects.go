@@ -183,3 +183,61 @@ func (h *ProjectsHandler) GetServices(w http.ResponseWriter, r *http.Request) {
 		"count":    len(services),
 	})
 }
+
+func (h *ProjectsHandler) StartService(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	projectName := chi.URLParam(r, "name")
+	serviceName := chi.URLParam(r, "service")
+
+	if projectName == "" {
+		http.Error(w, "project name is required", http.StatusBadRequest)
+		return
+	}
+
+	if serviceName == "" {
+		http.Error(w, "service name is required", http.StatusBadRequest)
+		return
+	}
+
+	err := h.projectsService.StartService(ctx, projectName, serviceName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"message": "service started successfully",
+		"project": projectName,
+		"service": serviceName,
+	})
+}
+
+func (h *ProjectsHandler) StopService(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	projectName := chi.URLParam(r, "name")
+	serviceName := chi.URLParam(r, "service")
+
+	if projectName == "" {
+		http.Error(w, "project name is required", http.StatusBadRequest)
+		return
+	}
+
+	if serviceName == "" {
+		http.Error(w, "service name is required", http.StatusBadRequest)
+		return
+	}
+
+	err := h.projectsService.StopService(ctx, projectName, serviceName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"message": "service stopped successfully",
+		"project": projectName,
+		"service": serviceName,
+	})
+}

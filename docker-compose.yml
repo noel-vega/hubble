@@ -9,5 +9,7 @@ services:
       - "3000:5000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /projects:/projects
     environment:
       - LOG_LEVEL=info
+      - PROJECTS_ROOT_PATH=/projects

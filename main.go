@@ -112,6 +112,8 @@ func main() {
 			r.Get("/projects/{name}/environment", projectsHandler.GetEnvironment)
 			r.Get("/projects/{name}/networks", projectsHandler.GetNetworks)
 			r.Get("/projects/{name}/services", projectsHandler.GetServices)
+			r.Post("/projects/{name}/services/{service}/start", projectsHandler.StartService)
+			r.Post("/projects/{name}/services/{service}/stop", projectsHandler.StopService)
 		}
 	})
 
