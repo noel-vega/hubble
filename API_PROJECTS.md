@@ -77,6 +77,8 @@ Content-Type: application/json
 - `networks` - Array of networks
 - `restart` - Restart policy
 - `command` - Override default command
+- `labels` - Array of Docker labels (e.g., for Traefik configuration)
+- `container_name` - Custom container name
 
 **Response (201 Created):**
 ```json
@@ -222,6 +224,30 @@ curl http://localhost:5000/projects/my-app/services \
 curl -X DELETE http://localhost:5000/projects/my-app/services/web \
   -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
+
+### 8. Add Service with Traefik Labels
+```bash
+curl -X POST http://localhost:5000/projects/my-app/services \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -d '{
+    "name": "blog",
+    "image": "registry.noelvega.dev/blog:main",
+    "container_name": "app-blog",
+    "networks": ["infra"],
+    "labels": [
+      "hubble.app=blog",
+      "traefik.enable=true",
+      "traefik.http.routers.blog.rule=Host(`blog.noelvega.dev`)",
+      "traefik.http.routers.blog.entrypoints=websecure",
+      "traefik.http.routers.blog.tls.certresolver=letsencrypt",
+      "traefik.http.services.blog.loadbalancer.server.port=80"
+    ],
+    "restart": "unless-stopped"
+  }'
+```
+
+This creates a service that Traefik will automatically expose at `https://blog.noelvega.dev` with Let's Encrypt SSL certificate.
 
 ## Technical Notes
 

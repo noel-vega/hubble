@@ -51,17 +51,19 @@ type ProjectNetwork struct {
 }
 
 type ComposeService struct {
-	Name        string            `json:"name"`
-	Image       string            `json:"image"`
-	Build       string            `json:"build"`
-	Ports       []string          `json:"ports"`
-	Environment map[string]string `json:"environment"`
-	Volumes     []string          `json:"volumes"`
-	DependsOn   []string          `json:"depends_on"`
-	Networks    []string          `json:"networks"`
-	Restart     string            `json:"restart"`
-	Command     string            `json:"command"`
-	Status      string            `json:"status"`
+	Name          string            `json:"name"`
+	Image         string            `json:"image"`
+	Build         string            `json:"build"`
+	Ports         []string          `json:"ports"`
+	Environment   map[string]string `json:"environment"`
+	Volumes       []string          `json:"volumes"`
+	DependsOn     []string          `json:"depends_on"`
+	Networks      []string          `json:"networks"`
+	Restart       string            `json:"restart"`
+	Command       string            `json:"command"`
+	Labels        []string          `json:"labels"`
+	ContainerName string            `json:"container_name"`
+	Status        string            `json:"status"`
 }
 
 type ComposeFile struct {
@@ -582,6 +584,24 @@ func (s *Service) GetProjectServices(ctx context.Context, projectName string) ([
 						service.Command = fmt.Sprintf("%v", cmdParts)
 					}
 				}
+
+				// Labels
+				if labels, ok := svcMap["labels"].([]interface{}); ok {
+					labelsList := []string{}
+					for _, label := range labels {
+						if labelStr, ok := label.(string); ok {
+							labelsList = append(labelsList, labelStr)
+						}
+					}
+					if len(labelsList) > 0 {
+						service.Labels = labelsList
+					}
+				}
+
+				// Container name
+				if containerName, ok := svcMap["container_name"].(string); ok {
+					service.ContainerName = containerName
+				}
 			}
 
 			services = append(services, service)
@@ -864,6 +884,14 @@ func (s *Service) AddService(ctx context.Context, projectName string, service Co
 			serviceConfig["command"] = service.Command
 		}
 
+		if len(service.Labels) > 0 {
+			serviceConfig["labels"] = service.Labels
+		}
+
+		if service.ContainerName != "" {
+			serviceConfig["container_name"] = service.ContainerName
+		}
+
 		compose.Services[service.Name] = serviceConfig
 		return nil
 	})
@@ -919,6 +947,14 @@ func (s *Service) UpdateService(ctx context.Context, projectName string, service
 
 		if service.Command != "" {
 			serviceConfig["command"] = service.Command
+		}
+
+		if len(service.Labels) > 0 {
+			serviceConfig["labels"] = service.Labels
+		}
+
+		if service.ContainerName != "" {
+			serviceConfig["container_name"] = service.ContainerName
 		}
 
 		compose.Services[service.Name] = serviceConfig
