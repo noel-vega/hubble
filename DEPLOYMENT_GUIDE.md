@@ -92,13 +92,19 @@ HUBBLE_DOMAIN=yourdomain.com
 
 # Required for Let's Encrypt
 HUBBLE_TRAEFIK_EMAIL=admin@yourdomain.com
+
+# Enable HTTPS (required for production)
+HUBBLE_HTTPS_REDIRECT=https-redirect
+HUBBLE_CERT_RESOLVER=letsencrypt
 ```
 
 ### 2. Start Services (Production Mode)
 
+**IMPORTANT:** Run this on your production server, NOT your local development machine!
+
 ```bash
-# Use production override for HTTPS
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Simply use docker compose - the .env file controls the behavior
+docker compose up -d
 ```
 
 ### 3. Verify HTTPS Certificates
@@ -110,10 +116,13 @@ docker compose logs -f hubble-traefik
 
 You should see:
 ```
-[acme] Trying to solve DNS-01
+[acme] Register...
+[acme] Trying to solve HTTP-01
 [acme] The server validated our request
 [acme] Certificate obtained successfully
 ```
+
+This process takes 30-60 seconds. Once complete, your sites will have valid HTTPS certificates!
 
 ### 4. Access Services (HTTPS)
 
@@ -144,10 +153,11 @@ docker push registry.yourdomain.com/myapp:latest
 | Domain | `localhost` | `yourdomain.com` |
 | Protocol | HTTP (port 80) | HTTPS (port 443) |
 | Certificates | None | Let's Encrypt |
-| HTTPS Redirect | Disabled | Enabled |
+| HTTPS Redirect | Disabled (`HUBBLE_HTTPS_REDIRECT=`) | Enabled (`HUBBLE_HTTPS_REDIRECT=https-redirect`) |
+| Cert Resolver | Disabled (`HUBBLE_CERT_RESOLVER=`) | Enabled (`HUBBLE_CERT_RESOLVER=letsencrypt`) |
 | Email Required | No | Yes |
 | Secure Cookies | No | Yes |
-| Docker Compose | `docker compose up -d` | `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d` |
+| Docker Compose | `docker compose up -d` | `docker compose up -d` |
 
 ---
 
@@ -183,26 +193,38 @@ Remove this line once everything works!
 
 ### Certificate Not Generating
 
-1. **Check DNS propagation:**
+**Common cause:** Running production config on local machine instead of production server!
+
+Let's Encrypt needs to access your domain from the internet. If you're testing on your local PC, it will fail. Deploy to your production server first.
+
+1. **Verify you're on production server:**
+   ```bash
+   # Check your public IP matches DNS
+   curl ifconfig.me
+   dig +short hubble.yourdomain.com
+   # These should match!
+   ```
+
+2. **Check DNS propagation:**
    ```bash
    dig hubble.yourdomain.com
    dig registry.yourdomain.com
    ```
 
-2. **Check Traefik can reach Let's Encrypt:**
+3. **Check ports are accessible from internet:**
    ```bash
-   docker compose exec hubble-traefik wget -O- https://acme-v02.api.letsencrypt.org/directory
-   ```
-
-3. **Check ports are accessible:**
-   ```bash
-   # From external machine
-   curl -I http://yourdomain.com
+   # From your local machine (NOT the server)
+   curl -I http://hubble.yourdomain.com
    ```
 
 4. **Check email is set:**
    ```bash
-   docker compose exec hubble-traefik env | grep EMAIL
+   grep HUBBLE_TRAEFIK_EMAIL .env
+   ```
+
+5. **Check Traefik logs for errors:**
+   ```bash
+   docker compose logs hubble-traefik | grep -i error
    ```
 
 ### "Connection Refused" Error
@@ -238,20 +260,22 @@ Remove this line once everything works!
 # Stop development stack
 docker compose down
 
-# Update .env with production values
-vim .env
+# Copy production template and update values
+cp .env.production .env
+vim .env  # Update passwords, secrets, domain, email
 
 # Start production stack
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+docker compose up -d
 ```
 
 ### Production → Development
 
 ```bash
 # Stop production stack
-docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+docker compose down
 
-# Update .env with development values
+# Update .env with development values (or use .env.example as template)
+cp .env.example .env
 vim .env
 
 # Start development stack
@@ -299,14 +323,14 @@ open http://hubble.localhost
 
 ### Production Commands
 ```bash
-# Start
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Start (make sure .env has production values!)
+docker compose up -d
 
 # Logs
 docker compose logs -f
 
 # Stop  
-docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+docker compose down
 
 # Access
 open https://hubble.yourdomain.com

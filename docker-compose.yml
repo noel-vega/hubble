@@ -31,12 +31,23 @@ services:
       - hubble
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.hubble-api.rule=Host(`hubble.${HUBBLE_DOMAIN:-localhost}`) && PathPrefix(`/api`)"
-      - "traefik.http.routers.hubble-api.entrypoints=web"
-      - "traefik.http.routers.hubble-api.priority=2"
+      # Shared configuration
       - "traefik.http.services.hubble-api.loadbalancer.server.port=5000"
       - "traefik.http.middlewares.hubble-api-stripprefix.stripprefix.prefixes=/api"
-      - "traefik.http.routers.hubble-api.middlewares=hubble-api-stripprefix"
+      - "traefik.http.middlewares.https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.https-redirect.redirectscheme.permanent=true"
+      # HTTP router - conditional redirect based on HUBBLE_DOMAIN
+      - "traefik.http.routers.hubble-api-http.rule=Host(`hubble.${HUBBLE_DOMAIN:-localhost}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.hubble-api-http.entrypoints=web"
+      - "traefik.http.routers.hubble-api-http.priority=2"
+      - "traefik.http.routers.hubble-api-http.middlewares=${HUBBLE_HTTPS_REDIRECT:-hubble-api-stripprefix}"
+      # HTTPS router
+      - "traefik.http.routers.hubble-api-secure.rule=Host(`hubble.${HUBBLE_DOMAIN:-localhost}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.hubble-api-secure.entrypoints=websecure"
+      - "traefik.http.routers.hubble-api-secure.priority=2"
+      - "traefik.http.routers.hubble-api-secure.tls=true"
+      - "traefik.http.routers.hubble-api-secure.tls.certresolver=${HUBBLE_CERT_RESOLVER:-}"
+      - "traefik.http.routers.hubble-api-secure.middlewares=hubble-api-stripprefix"
 
   hubble-web:
     build: ./web
@@ -46,10 +57,19 @@ services:
       - hubble
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.hubble-web.rule=Host(`hubble.${HUBBLE_DOMAIN:-localhost}`)"
-      - "traefik.http.routers.hubble-web.entrypoints=web"
-      - "traefik.http.routers.hubble-web.priority=1"
+      # Shared configuration
       - "traefik.http.services.hubble-web.loadbalancer.server.port=80"
+      # HTTP router - conditional redirect based on HUBBLE_DOMAIN
+      - "traefik.http.routers.hubble-web-http.rule=Host(`hubble.${HUBBLE_DOMAIN:-localhost}`)"
+      - "traefik.http.routers.hubble-web-http.entrypoints=web"
+      - "traefik.http.routers.hubble-web-http.priority=1"
+      - "traefik.http.routers.hubble-web-http.middlewares=${HUBBLE_HTTPS_REDIRECT:-}"
+      # HTTPS router
+      - "traefik.http.routers.hubble-web-secure.rule=Host(`hubble.${HUBBLE_DOMAIN:-localhost}`)"
+      - "traefik.http.routers.hubble-web-secure.entrypoints=websecure"
+      - "traefik.http.routers.hubble-web-secure.priority=1"
+      - "traefik.http.routers.hubble-web-secure.tls=true"
+      - "traefik.http.routers.hubble-web-secure.tls.certresolver=${HUBBLE_CERT_RESOLVER:-}"
 
   hubble-traefik:
     image: traefik:v3.6
@@ -64,13 +84,12 @@ services:
       - --providers.docker.exposedbydefault=false
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
-      # Development: Disable HTTPS redirect when HUBBLE_DOMAIN=localhost
-      # Production: Enable by uncommenting these lines and setting HUBBLE_TRAEFIK_EMAIL
-      # - --entrypoints.web.http.redirections.entrypoint.to=websecure
-      # - --entrypoints.web.http.redirections.entrypoint.scheme=https
       - --certificatesresolvers.letsencrypt.acme.email=${HUBBLE_TRAEFIK_EMAIL:-noreply@localhost}
       - --certificatesresolvers.letsencrypt.acme.storage=/data/acme.json
       - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      # Logging
+      - --log.level=INFO
+      - --accesslog=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - hubble-traefik-data:/data
@@ -111,9 +130,17 @@ services:
       com.hubble.managed: "true"
       com.hubble.service: "registry"
       traefik.enable: "true"
-      traefik.http.routers.registry.rule: "Host(`registry.${HUBBLE_DOMAIN:-localhost}`)"
-      traefik.http.routers.registry.entrypoints: "web"
+      # Shared configuration
       traefik.http.services.registry.loadbalancer.server.port: "5000"
+      # HTTP router - conditional redirect based on HUBBLE_DOMAIN
+      traefik.http.routers.registry-http.rule: "Host(`registry.${HUBBLE_DOMAIN:-localhost}`)"
+      traefik.http.routers.registry-http.entrypoints: "web"
+      traefik.http.routers.registry-http.middlewares: "${HUBBLE_HTTPS_REDIRECT:-}"
+      # HTTPS router
+      traefik.http.routers.registry-secure.rule: "Host(`registry.${HUBBLE_DOMAIN:-localhost}`)"
+      traefik.http.routers.registry-secure.entrypoints: "websecure"
+      traefik.http.routers.registry-secure.tls: "true"
+      traefik.http.routers.registry-secure.tls.certresolver: "${HUBBLE_CERT_RESOLVER:-}"
 
 volumes:
   # Docker-managed volumes - no permission issues!

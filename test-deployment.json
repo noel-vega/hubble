@@ -1,0 +1,16 @@
+{
+  "projectName": "test-volumes",
+  "deploymentType": "docker",
+  "dockerConfig": {
+    "image": "nginx:alpine",
+    "containerName": "test-volumes-app",
+    "port": 80,
+    "healthCheck": {
+      "enabled": true,
+      "path": "/",
+      "interval": "10s",
+      "timeout": "5s",
+      "retries": 3
+    }
+  }
+}

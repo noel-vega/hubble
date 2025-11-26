@@ -29,20 +29,32 @@ cp .env.example .env
 
 Edit `.env` and set required values:
 
+**For local development (localhost):**
 ```bash
+ENVIRONMENT=development
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=testpass123
+HUBBLE_DOMAIN=localhost
+# Leave HTTPS settings empty for localhost
+```
+
+**For production (with HTTPS):**
+```bash
+ENVIRONMENT=production
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=your-secure-password
 JWT_ACCESS_SECRET=$(openssl rand -base64 32)
 JWT_REFRESH_SECRET=$(openssl rand -base64 32)
-
-# For production with HTTPS
 HUBBLE_DOMAIN=yourdomain.com
 HUBBLE_TRAEFIK_EMAIL=admin@yourdomain.com
+HUBBLE_HTTPS_REDIRECT=https-redirect
+HUBBLE_CERT_RESOLVER=letsencrypt
 ```
 
 ### 2. Start Hubble
 
 ```bash
+# Same command for both development and production!
 docker compose up -d
 ```
 

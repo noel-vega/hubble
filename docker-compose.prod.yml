@@ -10,18 +10,28 @@ services:
       - --providers.docker.exposedbydefault=false
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
-      # Enable HTTPS redirect for production
-      - --entrypoints.web.http.redirections.entrypoint.to=websecure
-      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      # Let's Encrypt configuration
       - --certificatesresolvers.letsencrypt.acme.email=${HUBBLE_TRAEFIK_EMAIL}
       - --certificatesresolvers.letsencrypt.acme.storage=/data/acme.json
       - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      # Logging for production
+      - --log.level=INFO
+      - --accesslog=true
 
   hubble-server:
     environment:
       - ENVIRONMENT=production
     labels:
       - "traefik.enable=true"
+      # HTTPS redirect middleware
+      - "traefik.http.middlewares.https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.https-redirect.redirectscheme.permanent=true"
+      # HTTP router - redirect to HTTPS (except ACME challenges)
+      - "traefik.http.routers.hubble-api-http.rule=Host(`hubble.${HUBBLE_DOMAIN}`) && PathPrefix(`/api`) && !PathPrefix(`/.well-known/acme-challenge/`)"
+      - "traefik.http.routers.hubble-api-http.entrypoints=web"
+      - "traefik.http.routers.hubble-api-http.priority=3"
+      - "traefik.http.routers.hubble-api-http.middlewares=https-redirect"
+      # HTTPS router
       - "traefik.http.routers.hubble-api.rule=Host(`hubble.${HUBBLE_DOMAIN}`) && PathPrefix(`/api`)"
       - "traefik.http.routers.hubble-api.entrypoints=websecure"
       - "traefik.http.routers.hubble-api.tls.certresolver=letsencrypt"
@@ -33,6 +43,16 @@ services:
   hubble-web:
     labels:
       - "traefik.enable=true"
+      # HTTP router - redirect to HTTPS (except ACME challenges)
+      - "traefik.http.routers.hubble-web-http.rule=Host(`hubble.${HUBBLE_DOMAIN}`) && !PathPrefix(`/.well-known/acme-challenge/`)"
+      - "traefik.http.routers.hubble-web-http.entrypoints=web"
+      - "traefik.http.routers.hubble-web-http.priority=2"
+      - "traefik.http.routers.hubble-web-http.middlewares=https-redirect"
+      # ACME challenge router (highest priority, no redirect)
+      - "traefik.http.routers.hubble-web-acme.rule=Host(`hubble.${HUBBLE_DOMAIN}`) && PathPrefix(`/.well-known/acme-challenge/`)"
+      - "traefik.http.routers.hubble-web-acme.entrypoints=web"
+      - "traefik.http.routers.hubble-web-acme.priority=10"
+      # HTTPS router
       - "traefik.http.routers.hubble-web.rule=Host(`hubble.${HUBBLE_DOMAIN}`)"
       - "traefik.http.routers.hubble-web.entrypoints=websecure"
       - "traefik.http.routers.hubble-web.tls.certresolver=letsencrypt"
@@ -44,6 +64,16 @@ services:
       com.hubble.managed: "true"
       com.hubble.service: "registry"
       traefik.enable: "true"
+      # HTTP router - redirect to HTTPS (except ACME challenges)
+      traefik.http.routers.registry-http.rule: "Host(`registry.${HUBBLE_DOMAIN}`) && !PathPrefix(`/.well-known/acme-challenge/`)"
+      traefik.http.routers.registry-http.entrypoints: "web"
+      traefik.http.routers.registry-http.priority: "2"
+      traefik.http.routers.registry-http.middlewares: "https-redirect"
+      # ACME challenge router (highest priority, no redirect)
+      traefik.http.routers.registry-acme.rule: "Host(`registry.${HUBBLE_DOMAIN}`) && PathPrefix(`/.well-known/acme-challenge/`)"
+      traefik.http.routers.registry-acme.entrypoints: "web"
+      traefik.http.routers.registry-acme.priority: "10"
+      # HTTPS router
       traefik.http.routers.registry.rule: "Host(`registry.${HUBBLE_DOMAIN}`)"
       traefik.http.routers.registry.entrypoints: "websecure"
       traefik.http.routers.registry.tls.certresolver: "letsencrypt"
