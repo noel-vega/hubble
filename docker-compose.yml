@@ -3,8 +3,6 @@ services:
     build: .
     container_name: hubble-server 
     restart: unless-stopped
-    ports:
-      - "3000:5000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - hubble-projects:/projects
@@ -32,6 +30,29 @@ services:
       - HUBBLE_REGISTRY_STORAGE=/var/lib/hubble/registry
     networks:
       - hubble
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hubble-api.rule=Host(`hubble.${HUBBLE_DOMAIN:-localhost}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.hubble-api.entrypoints=websecure"
+      - "traefik.http.routers.hubble-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.hubble-api.priority=2"
+      - "traefik.http.services.hubble-api.loadbalancer.server.port=5000"
+      - "traefik.http.middlewares.hubble-api-stripprefix.stripprefix.prefixes=/api"
+      - "traefik.http.routers.hubble-api.middlewares=hubble-api-stripprefix"
+
+  hubble-web:
+    build: ./web
+    container_name: hubble-web
+    restart: unless-stopped
+    networks:
+      - hubble
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hubble-web.rule=Host(`hubble.${HUBBLE_DOMAIN:-localhost}`)"
+      - "traefik.http.routers.hubble-web.entrypoints=websecure"
+      - "traefik.http.routers.hubble-web.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.hubble-web.priority=1"
+      - "traefik.http.services.hubble-web.loadbalancer.server.port=80"
 
 volumes:
   # Docker-managed volumes - no permission issues!

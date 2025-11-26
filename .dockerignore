@@ -6,3 +6,6 @@ README.md
 .env.*
 Dockerfile
 docker-compose.yml
+web/node_modules
+web/dist
+web/.vscode
